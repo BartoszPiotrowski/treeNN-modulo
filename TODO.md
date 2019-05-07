@@ -1,0 +1,5 @@
+- test LSTM
+- and do some grid search
+- lr = 0.001 is OK -- lower not OK
+- first easy examples
+- compare with NMT, RNN, convolutions

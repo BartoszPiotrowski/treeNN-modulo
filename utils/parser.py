@@ -37,7 +37,7 @@ def split_on_first_balanced_symbol(expr):
     raise ValueError('Improper input expression.')
 
 
-def parse(term):
+def parser(term):
     '''
     Take expression like (1-((1+3)*2)) and return its parse tree:
     [symbol, left_subtree, right_subtree].
@@ -48,7 +48,7 @@ def parse(term):
     if term in CONSTANTS:
         return term
     symbol, left_subexpr, right_subexpr = split_on_first_balanced_symbol(term)
-    return [symbol, parse(left_subexpr), parse(right_subexpr)]
+    return [symbol, [parser(left_subexpr), parser(right_subexpr)]]
 
 
 if __name__ == '__main__':

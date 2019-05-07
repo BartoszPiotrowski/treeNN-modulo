@@ -79,24 +79,24 @@ labels, examples = parse_and_dedup_examples(args.filename)
     (train_examples, valid_examples, test_examples) = \
     split_to_train_valid_test(labels, examples, args.train, args.valid, args.test)
 
-with open(os.path.join(dirname, 'train.expr'), 'w') as f:
+with open(os.path.join(dirname, 'train.in'), 'w') as f:
     f.write('\n'.join(train_examples) + '\n')
-with open(os.path.join(dirname, 'train.rmd'), 'w') as f:
+with open(os.path.join(dirname, 'train.out'), 'w') as f:
     f.write('\n'.join(train_labels) + '\n')
 
-with open(os.path.join(dirname, 'valid.expr'), 'w') as f:
+with open(os.path.join(dirname, 'valid.in'), 'w') as f:
     f.write('\n'.join(valid_examples) + '\n')
-with open(os.path.join(dirname, 'valid.rmd'), 'w') as f:
+with open(os.path.join(dirname, 'valid.out'), 'w') as f:
     f.write('\n'.join(valid_labels) + '\n')
 
-with open(os.path.join(dirname, 'test.expr'), 'w') as f:
+with open(os.path.join(dirname, 'test.in'), 'w') as f:
     f.write('\n'.join(test_examples) + '\n')
-with open(os.path.join(dirname, 'test.rmd'), 'w') as f:
+with open(os.path.join(dirname, 'test.out'), 'w') as f:
     f.write('\n'.join(test_labels) + '\n')
 
-with open(os.path.join(dirname, 'vocab.expr'), 'w') as f:
+with open(os.path.join(dirname, 'vocab.in'), 'w') as f:
     vocab = set(' '.join(examples).split(' '))
     f.write('\n'.join(vocab) + '\n')
-with open(os.path.join(dirname, 'vocab.rmd'), 'w') as f:
+with open(os.path.join(dirname, 'vocab.out'), 'w') as f:
     vocab = set(' '.join(labels).split(' '))
     f.write('\n'.join(vocab) + '\n')
