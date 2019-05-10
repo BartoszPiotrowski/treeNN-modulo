@@ -11,16 +11,32 @@ from utils.parser import parser
 DEVICE = 'cpu'
 
 
+def MLP(num_layers, dim_in, dim_hid, dim_out):
+    def lin_relu(dim_in, dim_out):
+        return [
+            torch.nn.Linear(dim_in, dim_out),
+            torch.nn.ReLU()
+        ]
+    if num_layers == 1:
+        return torch.nn.Sequential(*lin_relu(dim_in, dim_out)).to(DEVICE)
+    else:
+        return torch.nn.Sequential(
+            *lin_relu(dim_in, dim_hid) + \
+            lin_relu(dim_hid, dim_hid) * (num_layers - 2) + \
+            lin_relu(dim_hid, dim_out)
+        ).to(DEVICE)
+
+
 class FunctionNetwork(torch.nn.Module):
-    def __init__(self, function_name, function_arity,
-                 dim_in_out=32, dim_h=32):
+    def __init__(self, function_name, function_arity, num_layers, num_units):
         super(FunctionNetwork, self).__init__()
         self.function_name = function_name
         self.function_arity = function_arity
+        #self.model = MLP(num_layers, num_units * function_arity, num_units, num_units)
         self.model = torch.nn.Sequential(
-            torch.nn.Linear(function_arity * dim_in_out, dim_h),
+            torch.nn.Linear(function_arity * 32, 32),
             torch.nn.ReLU(),
-            torch.nn.Linear(dim_h, dim_in_out),
+            torch.nn.Linear(32, 32),
         ).to(DEVICE)
 
     def forward(self, x):
@@ -28,12 +44,13 @@ class FunctionNetwork(torch.nn.Module):
 
 
 class ConstantNetwork(torch.nn.Module):
-    def __init__(self, dim_in=10, dim_h=32, dim_out=32):
+    def __init__(self, num_layers, num_constants, num_units):
         super(ConstantNetwork, self).__init__()
+        #self.model = MLP(num_layers, num_units_in, num_units, num_units)
         self.model = torch.nn.Sequential(
-            torch.nn.Linear(dim_in, dim_h),
+            torch.nn.Linear(num_constants, 32),
             torch.nn.ReLU(),
-            torch.nn.Linear(dim_h, dim_out),
+            torch.nn.Linear(32, 32),
         ).to(DEVICE)
 
     def forward(self, x):
@@ -41,12 +58,13 @@ class ConstantNetwork(torch.nn.Module):
 
 
 class ModuloNetwork(torch.nn.Module):
-    def __init__(self, dim_in=32, dim_h=32, dim_out=2):
+    def __init__(self, num_layers, num_units, modulo):
         super(ModuloNetwork, self).__init__()
+        #self.model = MLP(num_layers, num_units, num_units, modulo)
         self.model = torch.nn.Sequential(
-            torch.nn.Linear(dim_in, dim_h),
+            torch.nn.Linear(32, 32),
             torch.nn.ReLU(),
-            torch.nn.Linear(dim_h, dim_out),
+            torch.nn.Linear(32, modulo),
         ).to(DEVICE)
 
     def forward(self, x):
@@ -73,12 +91,14 @@ def consts_to_tensors(all_consts):
             dtype = torch.float).to(DEVICE) for v in all_consts}
 
 
-def instanciate_modules(functions, n_constants, modulo):
+def instanciate_modules(functions, num_constants, modulo, num_layers, num_units):
     modules = {}
     for symb in functions:  # TODO control this
-        modules[symb] = FunctionNetwork(symb, functions[symb])
-    modules['CONST'] = ConstantNetwork(dim_in=n_constants)
-    modules['MODULO'] = ModuloNetwork(dim_out=modulo)
+        modules[symb] = FunctionNetwork(
+            symb, functions[symb], num_layers, num_units)
+    modules['CONST'] = ConstantNetwork(num_layers, num_constants, num_units)
+    modules['MODULO'] = ModuloNetwork(num_layers, num_units, modulo)
+    print(modules)
     return modules
 
 
@@ -108,25 +128,24 @@ def loss(outputs, targets):
     return criterion(outputs, targets)
 
 
-def train(inputs, labels, modules, parser, loss, optimizer, epochs=1):
-    def _model(term): return model(term, parser, modules, consts_as_tensors)
+def train(inputs, labels, modules, consts_as_tensors, parser, loss, optimizer):
+    #train one epoch
     assert len(inputs) == len(labels)
-    for e in range(epochs):
-        ls = []
-        ps = []
-        for i in range(len(inputs)):
-            p = _model(inputs[i])
-            l = loss(p, labels[i])
-            ls.append(l.item())
-            ps.append(p.argmax().item())
-            optimizer.zero_grad()
-            l.backward()
-            optimizer.step()
-        l_avg = sum(ls) / len(ls)
-        return l_avg
-        # acc = sum(ps[i] == labels[i].item() \
-        #          for i in range(len(labels))) / len(labels)
-        #print("Loss on training {}. Accuracy on training {}.".format(l_avg, acc))
+    ls = []
+    ps = []
+    for i in range(len(inputs)):
+        p = model(inputs[i], parser, modules, consts_as_tensors)
+        l = loss(p, labels[i])
+        ls.append(l.item())
+        ps.append(p.argmax().item())
+        optimizer.zero_grad()
+        l.backward()
+        optimizer.step()
+    l_avg = sum(ls) / len(ls)
+    return l_avg
+    # acc = sum(ps[i] == labels[i].item() \
+    #          for i in range(len(labels))) / len(labels)
+    #print("Loss on training {}. Accuracy on training {}.".format(l_avg, acc))
 
 
 def predict(inputs, model):
@@ -134,10 +153,22 @@ def predict(inputs, model):
 
 
 def accuracy(inputs, labels, modules):
-    def _model(term): return model(term, parser, modules, consts_as_tensors)
+    _model = lambda term: model(term, parser, modules, consts_as_tensors)
     preds = predict(inputs, _model)
     return sum(preds[i] == labels[i].item()
                for i in range(len(labels))) / len(labels)
+
+def difficulty_doser(inputs, prev_level=0, levels=10):
+    # returns indices of inputs in length-dependent partitions
+    # 1, 2, ..., prev_level + 1
+    if prev_level >= levels:
+        return False
+    lengths = [len(i.split(' ')) for i in inputs]
+    limit_index = int((prev_level + 1) * len(inputs) / levels)
+    sorted_indices = [i[0] for i in sorted(enumerate(lengths), key=lambda x:x[1])]
+    return sorted_indices[:limit_index]
+
+
 
 
 ############ TEST ###############################################
@@ -161,12 +192,30 @@ args_parser.add_argument(
     type=int,
     help="Number of epochs.")
 args_parser.add_argument(
-    "--embed_dim",
-    default=8,
+    "--num_layers",
+    default=2,
     type=int,
-    help="Token embedding dimension.")
+    help="Number of layers in MLP modules for functions, constants and modulo.")
+args_parser.add_argument(
+    "--num_units",
+    default=32,
+    type=int,
+    help="Number of units in layers in MLP modules for functions, constants and modulo.")
+args_parser.add_argument(
+    "--lr",
+    default=0.001,
+    type=float,
+    help="Learning rate.")
+args_parser.add_argument(
+    "--momentum",
+    default=0.8,
+    type=int,
+    help="Momentum rate.")
+args_parser.add_argument(
+    "--short_examples_first",
+    action='store_true',
+    help="Train first on short examples.")
 args = args_parser.parse_args()
-
 
 
 FUNCTIONS_WITH_ARITIES = {
@@ -183,23 +232,53 @@ labels_valid = read_data(os.path.join(args.data_dir, 'valid.out'))
 inputs_vocab = read_data(os.path.join(args.data_dir, 'vocab.in'))
 labels_vocab = read_data(os.path.join(args.data_dir, 'vocab.out'))
 
-labels_train = [torch.tensor([int(l)]).to('cpu') for l in labels_train]
-labels_valid = [torch.tensor([int(l)]).to('cpu') for l in labels_valid]
+labels_train = [torch.tensor([int(l)]).to(DEVICE) for l in labels_train]
+labels_valid = [torch.tensor([int(l)]).to(DEVICE) for l in labels_valid]
 
-modulo = len(labels_vocab) + 1
+modulo = len(labels_vocab)
 constants = set(inputs_vocab) - set(FUNCTIONS_WITH_ARITIES) - {'(', ')'}
 consts_as_tensors = consts_to_tensors(constants)
-modules = instanciate_modules(FUNCTIONS_WITH_ARITIES, len(constants), modulo)
+modules = instanciate_modules(FUNCTIONS_WITH_ARITIES, len(constants), modulo,
+                              args.num_layers, args.num_units)
 params_of_modules = parameters_of_modules(modules)
 loss_1 = loss
-optim_1 = torch.optim.SGD(params_of_modules, lr=0.001, momentum=0.8)
-for e in range(args.epochs):
-    #t0 = time.time()
-    print(f"\nEpoch {e}.")
-    loss_train = train(inputs_train, labels_train, modules, parser, loss_1, optim_1)
-    print(f"Loss on training: {loss_train}")
-    acc_train = accuracy(inputs_train, labels_train, modules)
-    acc_valid = accuracy(inputs_valid, labels_valid, modules)
-    print(f"Accuracy on training: {acc_train}")
-    print(f"Accuracy on validation: {acc_valid}")
-    #print('Time:', time.time() - t0)
+optim_1 = torch.optim.SGD(params_of_modules, args.lr, args.momentum)
+
+if not args.short_examples_first:
+    for e in range(args.epochs):
+        #t0 = time.time()
+        print(f"\nEpoch {e}.")
+        loss_train = train(inputs_train, labels_train,
+                           modules, consts_as_tensors, parser, loss_1, optim_1)
+        print(f"Loss on training: {loss_train}")
+        #acc_train = accuracy(inputs_train, labels_train, modules)
+        acc_valid = accuracy(inputs_valid, labels_valid, modules)
+        #print(f"Accuracy on training: {acc_train}")
+        print(f"Accuracy on validation: {acc_valid}")
+        #print('Time:', time.time() - t0)
+else:
+    level = 0
+    indices_current_level = difficulty_doser(inputs_train, level)
+    inputs_train_current_level = [inputs_train[i] for i in indices_current_level]
+    labels_train_current_level = [labels_train[i] for i in indices_current_level]
+    max_l = max([len(i.split(' ')) for i in inputs_train_current_level])
+    for e in range(args.epochs):
+        print(f"\nEpoch {e}. Level {level}. Max length of examples {max_l}.")
+        print(inputs_train_current_level[-1])
+        loss_train = train(inputs_train_current_level, labels_train_current_level,
+                           modules, consts_as_tensors, parser, loss_1, optim_1)
+        print(f"Loss on training: {loss_train}")
+        acc_train = accuracy(inputs_train_current_level, labels_train_current_level, modules)
+        print(f"Accuracy on current training subset: {acc_train}")
+        acc_valid = accuracy(inputs_valid, labels_valid, modules)
+        print(f"Accuracy on validation: {acc_valid}")
+        if acc_train > 0.8:
+            level = level + 1
+            try:
+                indices_current_level = difficulty_doser(inputs_train, level)
+                inputs_train_current_level = [inputs_train[i] for i in indices_current_level]
+                labels_train_current_level = [labels_train[i] for i in indices_current_level]
+                max_l = max([len(i.split(' ')) for i in inputs_train_current_level])
+            except:
+                print("Trining finished.")
+                break
