@@ -71,7 +71,8 @@ Accuracy on validation: 1.0
 Trining finished.
 
 - very strange: when lin/relu/lin/relu -- no training even on simple data
-
+- on lin/relu acc_val = 1 in epoch 82
+- on lin alone no learning even with --short_examples_first; even though acc_train .7, acc_val .36
 
 # Experiment 1
 Data:
