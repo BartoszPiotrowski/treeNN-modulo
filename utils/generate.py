@@ -36,7 +36,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-n", default=32, type=int, help="Number of examples to generate.")
     parser.add_argument(
-        "--modulo", default=2, type=int, help="Dividing modulo this number.")
+        "--modulo", default=2, type=int, help="Reminder modulo this number.")
     parser.add_argument(
         "--numbers",
         type=str,
