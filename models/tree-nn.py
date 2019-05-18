@@ -4,6 +4,7 @@ import random
 import argparse
 import os
 import sys
+import logging
 sys.path.append('.') # TODO not like this
 from utils.parser import parser
 
@@ -98,7 +99,7 @@ def instanciate_modules(functions, num_constants, modulo, num_layers, num_units)
             symb, functions[symb], num_layers, num_units)
     modules['CONST'] = ConstantNetwork(num_layers, num_constants, num_units)
     modules['MODULO'] = ModuloNetwork(num_layers, num_units, modulo)
-    print(modules)
+    logging.info(modules)
     return modules
 
 
@@ -145,7 +146,7 @@ def train(inputs, labels, modules, consts_as_tensors, parser, loss, optimizer):
     return l_avg
     # acc = sum(ps[i] == labels[i].item() \
     #          for i in range(len(labels))) / len(labels)
-    #print("Loss on training {}. Accuracy on training {}.".format(l_avg, acc))
+    #logging.info("Loss on training {}. Accuracy on training {}.".format(l_avg, acc))
 
 
 def predict(inputs, model):
@@ -215,6 +216,11 @@ args_parser.add_argument(
     "--short_examples_first",
     action='store_true',
     help="Train first on short examples.")
+args_parser.add_argument(
+    "--log_file",
+    default='',
+    type=str,
+    help="Name of a log file.")
 args = args_parser.parse_args()
 
 
@@ -224,6 +230,11 @@ FUNCTIONS_WITH_ARITIES = {
     '-': 2
 }
 
+
+logging.basicConfig(filename=args.log_file,
+                    level=logging.INFO,
+                    format='[%(asctime)s] %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S')
 
 inputs_train = read_data(os.path.join(args.data_dir, 'train.in'))
 labels_train = read_data(os.path.join(args.data_dir, 'train.out'))
@@ -247,15 +258,15 @@ optim_1 = torch.optim.SGD(params_of_modules, args.lr, args.momentum)
 if not args.short_examples_first:
     for e in range(args.epochs):
         #t0 = time.time()
-        print(f"\nEpoch {e}.")
+        logging.info(f"\nEpoch {e}.")
         loss_train = train(inputs_train, labels_train,
                            modules, consts_as_tensors, parser, loss_1, optim_1)
-        print(f"Loss on training: {loss_train}")
+        logging.info(f"Loss on training: {loss_train}")
         #acc_train = accuracy(inputs_train, labels_train, modules)
         acc_valid = accuracy(inputs_valid, labels_valid, modules)
-        #print(f"Accuracy on training: {acc_train}")
-        print(f"Accuracy on validation: {acc_valid}")
-        #print('Time:', time.time() - t0)
+        #logging.info(f"Accuracy on training: {acc_train}")
+        logging.info(f"Accuracy on validation: {acc_valid}")
+        #logging.info('Time:', time.time() - t0)
 else:
     level = 0
     indices_current_level = difficulty_doser(inputs_train, level)
@@ -263,15 +274,15 @@ else:
     labels_train_current_level = [labels_train[i] for i in indices_current_level]
     max_l = max([len(i.split(' ')) for i in inputs_train_current_level])
     for e in range(args.epochs):
-        print(f"\nEpoch {e}. Level {level}. Max length of examples {max_l}.")
-        print(inputs_train_current_level[-1])
+        logging.info(f"\nEpoch {e}. Level {level}. Max length of examples {max_l}.")
+        logging.info(inputs_train_current_level[-1])
         loss_train = train(inputs_train_current_level, labels_train_current_level,
                            modules, consts_as_tensors, parser, loss_1, optim_1)
-        print(f"Loss on training: {loss_train}")
+        logging.info(f"Loss on training: {loss_train}")
         acc_train = accuracy(inputs_train_current_level, labels_train_current_level, modules)
-        print(f"Accuracy on current training subset: {acc_train}")
+        logging.info(f"Accuracy on current training subset: {acc_train}")
         acc_valid = accuracy(inputs_valid, labels_valid, modules)
-        print(f"Accuracy on validation: {acc_valid}")
+        logging.info(f"Accuracy on validation: {acc_valid}")
         if acc_train > 0.8:
             level = level + 1
             try:
@@ -280,5 +291,5 @@ else:
                 labels_train_current_level = [labels_train[i] for i in indices_current_level]
                 max_l = max([len(i.split(' ')) for i in inputs_train_current_level])
             except:
-                print("Trining finished.")
+                logging.info("Trining finished.")
                 break
